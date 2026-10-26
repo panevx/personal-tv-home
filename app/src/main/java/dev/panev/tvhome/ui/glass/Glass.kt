@@ -123,6 +123,9 @@ fun Modifier.dpadClick(
     onPressed: (Boolean) -> Unit = {},
 ): Modifier = composed {
     var longFired by remember { mutableStateOf(false) }
+    // Only a press that started here counts. Otherwise the release of a long press that opened a
+    // menu lands on the menu's first row and clicks it.
+    var armed by remember { mutableStateOf(false) }
     onPreviewKeyEvent { e ->
         val code = e.nativeKeyEvent.keyCode
         if (code != NativeKeyEvent.KEYCODE_DPAD_CENTER && code != NativeKeyEvent.KEYCODE_ENTER &&
@@ -132,9 +135,10 @@ fun Modifier.dpadClick(
             KeyEventType.KeyDown -> {
                 val native = e.nativeKeyEvent
                 if (native.repeatCount == 0) {
+                    armed = true
                     longFired = false
                     onPressed(true)
-                } else if (!longFired && onLongClick != null && (native.isLongPress || native.repeatCount >= 10)) {
+                } else if (armed && !longFired && onLongClick != null && (native.isLongPress || native.repeatCount >= 10)) {
                     longFired = true
                     onPressed(false)
                     onLongClick()
@@ -142,7 +146,8 @@ fun Modifier.dpadClick(
             }
             KeyEventType.KeyUp -> {
                 onPressed(false)
-                if (!longFired) onClick()
+                if (armed && !longFired) onClick()
+                armed = false
                 longFired = false
             }
         }

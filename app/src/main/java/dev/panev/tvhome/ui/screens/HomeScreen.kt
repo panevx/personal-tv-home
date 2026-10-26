@@ -171,8 +171,8 @@ private fun dockMenu(vm: LauncherViewModel, app: AppEntry) = Overlay.Menu(
     title = app.label,
     items = listOf(
         MenuItem("Open", Icons.Rounded.PlayArrow) { vm.launch(app) },
-        MenuItem("Move left", Icons.Rounded.ChevronLeft) { vm.prefs.moveFavorite(app.pkg, -1) },
-        MenuItem("Move right", Icons.Rounded.ChevronRight) { vm.prefs.moveFavorite(app.pkg, 1) },
+        MenuItem("Move left", Icons.Rounded.ChevronLeft) { vm.moveDockApp(app.pkg, -1) },
+        MenuItem("Move right", Icons.Rounded.ChevronRight) { vm.moveDockApp(app.pkg, 1) },
         MenuItem("Remove from dock", Icons.Rounded.RemoveCircleOutline) { vm.prefs.toggleFavorite(app.pkg) },
         MenuItem("App info", Icons.Rounded.Info) { vm.apps.openAppInfo(app.pkg) },
     ),

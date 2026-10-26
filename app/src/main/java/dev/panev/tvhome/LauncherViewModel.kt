@@ -129,6 +129,12 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
         if (apps.launch(app)) prefs.recordLaunch(app.pkg)
     }
 
+    /** Moves a dock tile and keeps focus on it, rather than on whatever slid into its old slot. */
+    fun moveDockApp(pkg: String, by: Int) {
+        prefs.moveFavorite(pkg, by)
+        prefs.favorites.orEmpty().indexOf(pkg).takeIf { it >= 0 }?.let { dockFocus = it }
+    }
+
     fun searchIn(app: AppEntry, query: String) {
         if (apps.launchSearch(app, query)) prefs.recordLaunch(app.pkg)
     }
