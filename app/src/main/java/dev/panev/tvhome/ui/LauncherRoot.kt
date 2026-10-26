@@ -85,7 +85,7 @@ fun LauncherRoot(vm: LauncherViewModel) {
                 },
                 label = "screen",
             ) { s ->
-                Box(Modifier.fillMaxSize().then(if (blocked) Modifier.blockFocus() else Modifier)) {
+                Box(Modifier.fillMaxSize().blockFocus(blocked)) {
                     when (s) {
                         Screen.Home -> HomeScreen(vm)
                         Screen.Discover -> DiscoverScreen(vm)
@@ -105,15 +105,23 @@ fun LauncherRoot(vm: LauncherViewModel) {
     }
 }
 
-/** Keeps D-pad focus out of the screen underneath while a panel or dialog is up. */
+/**
+ * Keeps D-pad focus out of the screen underneath while a panel or dialog is up. The focus group is
+ * always there and only its behaviour toggles: inserting one above the focused tile when a menu
+ * opens corrupts the focus tree, so the menu can't take focus and the next key press crashes.
+ */
 @OptIn(ExperimentalComposeUiApi::class)
-private fun Modifier.blockFocus() = this
-    .focusProperties { enter = { FocusRequester.Cancel } }
+private fun Modifier.blockFocus(blocked: Boolean) = this
+    .focusProperties { if (blocked) enter = { FocusRequester.Cancel } }
     .focusGroup()
 
+/**
+ * Keeps D-pad focus inside a panel or dialog. Released as soon as it is dismissed, so focus can go
+ * back to Home while it is still fading out.
+ */
 @OptIn(ExperimentalComposeUiApi::class)
-private fun Modifier.trapFocus() = this
-    .focusProperties { exit = { FocusRequester.Cancel } }
+private fun Modifier.trapFocus(active: Boolean) = this
+    .focusProperties { if (active) exit = { FocusRequester.Cancel } }
     .focusGroup()
 
 /**
@@ -183,7 +191,7 @@ private fun SettingsPanel(vm: LauncherViewModel) {
                     .width(372.dp)
                     .fillMaxHeight()
                     .glass(PanelShape, strength = 1.9f, shadow = 30.dp)
-                    .trapFocus()
+                    .trapFocus(vm.settingsOpen)
                     .padding(horizontal = 12.dp, vertical = 22.dp)
             ) {
                 Txt("Settings", Type.Title, Modifier.padding(start = 18.dp, bottom = 16.dp))
@@ -249,7 +257,7 @@ private fun MenuCard(vm: LauncherViewModel, menu: Overlay.Menu) {
             .width(420.dp)
             .heightIn(max = 470.dp)
             .glass(PanelShape, strength = 2.2f, shadow = 30.dp)
-            .trapFocus()
+            .trapFocus(vm.overlay === menu)
             .padding(horizontal = 12.dp, vertical = 20.dp)
     ) {
         Column(Modifier.padding(start = 18.dp, end = 18.dp, bottom = 14.dp)) {
@@ -285,7 +293,7 @@ private fun PromptCard(vm: LauncherViewModel, prompt: Overlay.Prompt) {
         Modifier
             .width(520.dp)
             .glass(PanelShape, strength = 2.2f, shadow = 30.dp)
-            .trapFocus()
+            .trapFocus(vm.overlay === prompt)
             .padding(28.dp)
     ) {
         Txt(prompt.title, Type.Headline)

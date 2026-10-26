@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
@@ -110,6 +111,7 @@ private fun Dock(vm: LauncherViewModel, apps: List<AppEntry>, onFocusLabel: (Str
     val count = apps.size + 1
     val requesters = remember(count) { List(count) { FocusRequester() } }
     val listState = rememberLazyListState()
+    var dockHasFocus by remember { mutableStateOf(false) }
 
     // Land on the last-focused tile whenever Home appears or the Home key is pressed.
     val ready = vm.prefs.favorites != null && vm.apps.apps.isNotEmpty()
@@ -117,10 +119,12 @@ private fun Dock(vm: LauncherViewModel, apps: List<AppEntry>, onFocusLabel: (Str
         if (!ready) return@LaunchedEffect
         val target = vm.dockFocus.coerceIn(0, count - 1)
         listState.scrollToItem((target - 1).coerceAtLeast(0))
-        // The target tile may only be composed a frame or two after the scroll.
-        repeat(6) {
+        // The target tile may only be composed a frame or two after the scroll, and a closing menu
+        // can hold on to focus for a moment, so keep asking until the dock really has it.
+        repeat(30) {
             awaitFrame()
-            if (runCatching { requesters[target].requestFocus() }.isSuccess) return@LaunchedEffect
+            runCatching { requesters[target].requestFocus() }
+            if (dockHasFocus) return@LaunchedEffect
         }
     }
 
@@ -128,6 +132,7 @@ private fun Dock(vm: LauncherViewModel, apps: List<AppEntry>, onFocusLabel: (Str
         Modifier
             .widthIn(max = dockMaxWidth())
             .glass(DockShape, shadow = 28.dp)
+            .onFocusChanged { dockHasFocus = it.hasFocus }
     ) {
         LazyRow(
             state = listState,
