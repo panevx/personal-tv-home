@@ -33,7 +33,11 @@ class AppArt(val banner: ImageBitmap?, val icon: ImageBitmap?, val background: C
 
 class AppRepository(private val context: Context) {
     private val pm = context.packageManager
-    private val artCache = LruCache<String, AppArt>(96)
+    /** Sized by bytes, not entries: enough for the dock and a screenful of Apps. */
+    private val artCache = object : LruCache<String, AppArt>(6 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: AppArt) =
+            (value.banner?.let { it.width * it.height * 4 } ?: 0) + (value.icon?.let { it.width * it.height * 4 } ?: 0)
+    }
 
     var apps by mutableStateOf<List<AppEntry>>(emptyList())
         private set
@@ -65,6 +69,8 @@ class AppRepository(private val context: Context) {
 
     fun find(pkg: String?): AppEntry? = apps.firstOrNull { it.pkg == pkg }
 
+    fun clearArt() = artCache.evictAll()
+
     fun cachedArt(pkg: String): AppArt? = artCache.get(pkg)
 
     suspend fun art(app: AppEntry): AppArt {
@@ -73,7 +79,8 @@ class AppRepository(private val context: Context) {
             val banner = runCatching { pm.getActivityBanner(app.component) }.getOrNull()
                 ?: runCatching { pm.getApplicationBanner(app.pkg) }.getOrNull()
             val art = if (banner != null) {
-                AppArt(banner.render(maxWidth = 480).asImageBitmap(), null, Color.Black)
+                // The widest tile (Apps grid, focused) is about 370 px.
+                AppArt(banner.render(maxWidth = 384).asImageBitmap(), null, Color.Black)
             } else {
                 val icon = runCatching { pm.getActivityIcon(app.component) }.getOrNull()
                     ?: pm.defaultActivityIcon

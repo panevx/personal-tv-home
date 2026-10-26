@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.URL
+import kotlin.math.roundToInt
 
 /** Only exists so the system lets us read active media sessions. */
 class MediaListenerService : NotificationListenerService()
@@ -51,6 +52,8 @@ class MediaRepository(private val context: Context, private val scope: Coroutine
     private var started = false
     private var artUri: String? = null
     private var uriArt: Bitmap? = null
+    private var embeddedKey: String? = null
+    private var embeddedArt: Bitmap? = null
 
     var nowPlaying by mutableStateOf<NowPlaying?>(null)
         private set
@@ -122,9 +125,14 @@ class MediaRepository(private val context: Context, private val scope: Coroutine
             return
         }
         val state = c.playbackState
-        val embedded = meta.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
-            ?: meta.getBitmap(MediaMetadata.METADATA_KEY_ART)
-            ?: meta.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+        // Every metadata read is a fresh copy of the art, often 1000+ px; keep one scaled copy per track.
+        val key = "${c.packageName}|$title|${meta.getString(MediaMetadata.METADATA_KEY_ALBUM)}"
+        val embedded = embeddedArt.takeIf { key == embeddedKey }
+            ?: (meta.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+                ?: meta.getBitmap(MediaMetadata.METADATA_KEY_ART)
+                ?: meta.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON))
+                ?.fitArt()
+                ?.also { embeddedKey = key; embeddedArt = it }
         val uri = meta.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
             ?: meta.getString(MediaMetadata.METADATA_KEY_ART_URI)
             ?: meta.getString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI)
@@ -158,13 +166,32 @@ class MediaRepository(private val context: Context, private val scope: Coroutine
                     } else {
                         context.contentResolver.openInputStream(parsed)
                     }
-                    stream?.use { BitmapFactory.decodeStream(it) }
+                    stream?.use { decodeArt(it.readBytes()) }
                 }.getOrNull()
             }
             if (artUri == uri) {
                 uriArt = bmp
                 publish()
             }
+        }
+    }
+
+    private companion object {
+        /** The largest the art is ever drawn: 300 dp on the Player screen. */
+        const val ART_PX = 600
+
+        fun Bitmap.fitArt(): Bitmap {
+            val scale = ART_PX.toFloat() / maxOf(width, height)
+            if (scale >= 1f) return this
+            return Bitmap.createScaledBitmap(this, (width * scale).roundToInt().coerceAtLeast(1), (height * scale).roundToInt().coerceAtLeast(1), true)
+        }
+
+        fun decodeArt(bytes: ByteArray): Bitmap? {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            var sample = 1
+            while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= ART_PX) sample *= 2
+            return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })?.fitArt()
         }
     }
 }

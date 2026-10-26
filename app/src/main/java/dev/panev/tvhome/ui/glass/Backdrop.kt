@@ -49,12 +49,17 @@ val LocalRootSize = staticCompositionLocalOf { IntSize(1920, 1080) }
 @Composable
 fun rememberWallpaperBackdrop(wallpaper: Wallpaper, size: IntSize): Backdrop? {
     val context = LocalContext.current
-    var backdrop by remember { mutableStateOf<Backdrop?>(null) }
+    // The first one is decoded in place (a few tens of ms) so Home, which is rebuilt each time it comes
+    // back, shows its wallpaper on the first frame rather than fading in from black.
+    var loaded by remember {
+        mutableStateOf(if (size.width > 0 && size.height > 0) Triple(wallpaper.id, size, loadWallpaper(context, wallpaper.res, size)) else null)
+    }
     LaunchedEffect(wallpaper.id, size) {
         if (size.width <= 0 || size.height <= 0) return@LaunchedEffect
-        backdrop = withContext(Dispatchers.Default) { loadWallpaper(context, wallpaper.res, size) }
+        if (loaded?.first == wallpaper.id && loaded?.second == size) return@LaunchedEffect
+        loaded = Triple(wallpaper.id, size, withContext(Dispatchers.Default) { loadWallpaper(context, wallpaper.res, size) })
     }
-    return backdrop
+    return loaded?.third
 }
 
 /** Album art turned into a full-screen, softly blurred field. */
@@ -75,18 +80,16 @@ fun rememberArtBackdrop(art: Bitmap?, size: IntSize): Backdrop? {
     return backdrop
 }
 
-private val thumbCache = HashMap<Int, ImageBitmap>()
-
+/** Kept only while the Wallpapers screen is up; a process-wide cache held all eight (4 MB) forever. */
 @Composable
 fun rememberThumbnail(@DrawableRes res: Int): ImageBitmap? {
     val context = LocalContext.current
-    var thumb by remember(res) { mutableStateOf(thumbCache[res]) }
+    var thumb by remember(res) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(res) {
-        if (thumb != null) return@LaunchedEffect
         thumb = withContext(Dispatchers.IO) {
             val opts = BitmapFactory.Options().apply { inSampleSize = 4; inScaled = false }
             BitmapFactory.decodeResource(context.resources, res, opts).asImageBitmap()
-        }.also { thumbCache[res] = it }
+        }
     }
     return thumb
 }
